@@ -1,0 +1,82 @@
+# Publishes n8n-nodes-relvato to npm, with a provenance statement, when a version tag (v0.1.0, v0.2.0 …) is pushed.
+#
+# n8n requires verified community nodes to be published from GitHub Actions with npm provenance. Provenance lets
+# anyone verify that the package on npm was built by this workflow, from this repository and this commit.
+#
+# ─── ONE-TIME SETUP (the owner) ────────────────────────────────────────────────────────────────────────────────
+#
+# Authentication is npm TRUSTED PUBLISHING (OIDC): GitHub mints a short-lived token for this workflow run, so no
+# NPM_TOKEN secret exists anywhere. Configure the trusted publisher on npmjs.com:
+#
+#   npmjs.com → n8n-nodes-relvato → Settings → Trusted Publisher → GitHub Actions
+#     Organization or user:  Relvato
+#     Repository:            n8n-nodes-relvato
+#     Workflow filename:     publish.yml
+#     Environment:           (leave empty)
+#
+# Then, under the same settings, set "Publishing access" to require 2FA and disallow tokens, so only this workflow
+# can publish.
+#
+# ─── RELEASING ─────────────────────────────────────────────────────────────────────────────────────────────────
+#
+#   1. Bump "version" in package.json and add the CHANGELOG.md entry (or run `npm run release`, which does both and
+#      tags v<version> — see .release-it.json).
+#   2. git tag v<version> && git push origin main --tags
+#
+# The tag must match package.json's version, or the run stops before publishing.
+
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+
+    permissions:
+      # Required for npm trusted publishing (OIDC) and the provenance attestation.
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing needs npm 11.5.1 or newer.
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - name: Check the tag matches package.json
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package.json version ${version}" >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: node --test test/*.test.js
+
+      - name: Publish
+        # RELEASE_MODE lets the template's prepublishOnly guard (n8n-node prerelease) through.
+        run: npm publish --provenance --access public
+        env:
+          RELEASE_MODE: 'true'
