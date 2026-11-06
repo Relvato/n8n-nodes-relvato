@@ -1,0 +1,25 @@
+# Runs n8n's community package scanner (the check n8n runs for verified nodes) against the version published on npm.
+# Run it from the Actions tab after a release; it lints the source recorded in the package's provenance.
+name: n8n scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version on npm to scan (default: latest)'
+        required: false
+        default: ''
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Scan the published package
+        run: npx -y @n8n/scan-community-package "n8n-nodes-relvato${VERSION:+@$VERSION}"
+        env:
+          VERSION: ${{ inputs.version }}
