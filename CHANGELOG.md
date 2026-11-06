@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1
+
+- Released through npm trusted publishing (OIDC) only, with provenance; no npm token is used any more.
+- `repository.url` in package.json uses npm's normalized form.
+
 ## 0.1.0
 
 Initial release.

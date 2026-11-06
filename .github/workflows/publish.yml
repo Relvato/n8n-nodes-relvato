@@ -17,10 +17,8 @@
 # Then, under the same settings, set "Publishing access" to require 2FA and disallow tokens, so only this workflow
 # can publish.
 #
-# FIRST RELEASE ONLY: npm offers a trusted publisher only for a package that already exists. For v0.1.0, create a
-# granular access token on npmjs.com (read and write, all packages or the relvato org, short expiry), add it to this
-# repo as the Actions secret NPM_TOKEN, push the tag, then set up the trusted publisher as above and DELETE both the
-# token and the secret. The run still publishes with provenance. Later runs authenticate with OIDC only.
+# (v0.1.0 went out once with a short-lived token, because npm offers a trusted publisher only for a package that
+# already exists; that token and its secret are deleted. Every release since authenticates with OIDC only.)
 #
 # ─── RELEASING ─────────────────────────────────────────────────────────────────────────────────────────────────
 #
@@ -85,5 +83,3 @@ jobs:
         run: npm publish --provenance --access public
         env:
           RELEASE_MODE: 'true'
-          # Only for the first release (see ONE-TIME SETUP); empty afterwards, when npm uses trusted publishing (OIDC).
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

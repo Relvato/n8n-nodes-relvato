@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-relvato",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Relvato website monitoring for n8n: trigger workflows when a site goes down, a monitor finds a problem or a vulnerability appears, and add sites, run monitors, pause groups and create heartbeats.",
   "license": "MIT",
   "homepage": "https://www.relvato.com/integrations/n8n",
@@ -19,7 +19,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Relvato/n8n-nodes-relvato.git"
+    "url": "git+https://github.com/Relvato/n8n-nodes-relvato.git"
   },
   "bugs": {
     "url": "https://github.com/Relvato/n8n-nodes-relvato/issues"
