@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2
+
+- Fix: "Listen for test event" now receives Relvato's sample event. The node asks for it while n8n is still setting up the trigger (n8n closes the node's helpers afterwards), and Relvato sends it a few seconds later, once n8n has stored the signing secret. Needs Relvato's `delayMs` on `POST /api/v1/hooks/test`.
+
 ## 0.1.1
 
 - Released through npm trusted publishing (OIDC) only, with provenance; no npm token is used any more.

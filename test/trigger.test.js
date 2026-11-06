@@ -64,7 +64,7 @@ test("create surfaces Relvato's plan_required message", async () => {
 	});
 });
 
-test('in test mode, create asks Relvato for a sample event after it returns', async () => {
+test('in test mode, create asks Relvato (during create, with delayMs) for a sample event', async () => {
 	const { ctx, calls } = hookContext({
 		params,
 		mode: 'manual',
@@ -72,12 +72,12 @@ test('in test mode, create asks Relvato for a sample event after it returns', as
 		handler: (req) => (req.url.endsWith('/hooks/test') ? { statusCode: 404, body: { error: 'not_found' } } : { statusCode: 201, body: { id: 'hook-1', secret: 'whsec_abc' } }),
 	});
 	assert.equal(await hooks.create.call(ctx), true);
-	assert.equal(calls.length, 1, 'the sample is requested after create() returns');
-	await new Promise((r) => setTimeout(r, 2300));
-	assert.equal(calls.length, 2);
+	// n8n closes the node's helpers once create() returns, so the request is made inside it; Relvato waits delayMs
+	// before sending, by which time n8n has stored the signing secret.
+	assert.equal(calls.length, 2, 'the sample is requested before create() returns');
 	assert.equal(calls[1].url, 'https://app.relvato.com/api/v1/hooks/test');
-	assert.deepEqual(calls[1].body, { id: 'hook-1' });
-	// …and its 404 (endpoint not live yet) was ignored: nothing threw.
+	assert.deepEqual(calls[1].body, { id: 'hook-1', delayMs: 3000 });
+	// …and its error (here a 404) was ignored: nothing threw.
 });
 
 test('checkExists: true for our active subscription with the same settings', async () => {

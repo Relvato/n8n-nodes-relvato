@@ -7,7 +7,7 @@ import type {
 	IWebhookResponseData,
 	JsonObject,
 } from 'n8n-workflow';
-import { NodeApiError, NodeConnectionTypes, NodeOperationError, sleep } from 'n8n-workflow';
+import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 import { GROUP_OPTIONS } from '../Relvato/shared/constants';
 import { searchSites, siteLocator } from '../Relvato/shared/methods';
 import { relvatoApiRequest } from '../Relvato/shared/transport';
@@ -31,7 +31,8 @@ interface HookData extends IDataObject {
 }
 
 /** How long after create() to ask Relvato for a sample event in test mode (see sendTestEvent). */
-const TEST_EVENT_DELAY_MS = 2000;
+/** How long Relvato waits before sending the test event (n8n stores the signing secret once create() returns). */
+const TEST_EVENT_DELAY_MS = 3000;
 
 function eventDefinition(ctx: IHookFunctions | IWebhookFunctions): TriggerEventDefinition {
 	const value = ctx.getNodeParameter('event') as string;
@@ -76,16 +77,16 @@ async function deleteSubscription(ctx: IHookFunctions, id: string): Promise<void
 
 /**
  * Test mode only ("Listen for test event"): ask Relvato to send this subscription a signed sample event, so the
- * editor gets data at once. It runs a moment after create() returns, because n8n only stores the test webhook's
- * static data (which holds the signing secret webhook() verifies with) once create() has finished. A convenience:
- * any failure is logged and ignored.
+ * editor gets data at once. n8n stores the test webhook's static data (which holds the signing secret webhook()
+ * verifies with) only once create() has returned, and the node's helpers close then — so the request goes out now,
+ * awaited inside create(), with `delayMs`: Relvato answers 202 at once and sends the event a few seconds later.
+ * A convenience: any failure is logged and ignored.
  */
-async function sendTestEvent(ctx: IHookFunctions, id: string): Promise<void> {
+async function requestTestEvent(ctx: IHookFunctions, id: string): Promise<void> {
 	try {
-		await sleep(TEST_EVENT_DELAY_MS);
-		await relvatoApiRequest.call(ctx, 'POST', '/api/v1/hooks/test', { body: { id } });
+		await relvatoApiRequest.call(ctx, 'POST', '/api/v1/hooks/test', { body: { id, delayMs: TEST_EVENT_DELAY_MS } });
 	} catch (error) {
-		ctx.logger.debug(`Relvato didn't send a test event: ${(error as Error).message}`);
+		ctx.logger.warn(`Relvato didn't send a test event: ${(error as Error).message}`);
 	}
 }
 
@@ -221,7 +222,7 @@ export class RelvatoTrigger implements INodeType {
 				data.hookId = created.id;
 				data.secret = created.secret;
 				if (this.getMode() === 'manual' || this.getActivationMode() === 'manual') {
-					void sendTestEvent(this, created.id);
+					await requestTestEvent(this, created.id);
 				}
 				return true;
 			},
