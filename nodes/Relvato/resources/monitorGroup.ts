@@ -29,8 +29,8 @@ export const monitorGroupOperations: INodeProperties[] = [
 				name: 'Run Monitors Now',
 				value: 'run',
 				description:
-					"Run a site's monitors now, or one group of them, for example after a deploy. Each run counts toward the plan's monthly runs.",
-				action: 'Run monitors now',
+					"Run a site's monitors now (all of them or one group) and return the queued run IDs; each run uses one of the plan's monthly runs",
+				action: 'Run monitors now using the monthly runs of the plan',
 			},
 		],
 		default: 'run',

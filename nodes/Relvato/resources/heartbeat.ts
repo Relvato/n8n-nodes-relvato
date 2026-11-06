@@ -15,8 +15,8 @@ export const heartbeatOperations: INodeProperties[] = [
 				name: 'Add',
 				value: 'add',
 				description:
-					'Create a heartbeat for a job you run (a cron job, a backup, a scheduled task) and get its ping URL. If no ping arrives in time, Relvato alerts you.',
-				action: 'Add a heartbeat',
+					'Create a heartbeat for a job you run (a cron job, a backup, a scheduled task) and return its ping URL; Relvato alerts you when no ping arrives in time',
+				action: 'Add a heartbeat and get its ping URL',
 			},
 		],
 		default: 'add',

@@ -2,11 +2,19 @@ import type { IDataObject } from 'n8n-workflow';
 
 /** Pure helpers, shared by both nodes and covered by the tests. No n8n context, no I/O. */
 
+/** A site as REST lists it (GET /api/v1/sites), for the Site pickers. */
 export interface RelvatoSite extends IDataObject {
 	id: string;
 	name: string | null;
 	url: string;
-	connectionType?: string;
+}
+
+/** A site as the MCP tool list_sites summarises it (Get Many, Find by Domain). */
+export interface RelvatoSiteSummary extends RelvatoSite {
+	platform: 'wordpress' | 'other';
+	/** Ownership is proven: monitors run on their schedule and send alerts. */
+	ready: boolean;
+	disabled: boolean;
 }
 
 export interface RelvatoRun extends IDataObject {

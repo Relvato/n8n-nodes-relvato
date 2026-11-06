@@ -13,7 +13,7 @@ import { runFields, runOperations } from './resources/run';
 import { siteFields, siteOperations } from './resources/site';
 import { searchSites } from './shared/methods';
 import { callRelvatoTool, relvatoApiRequest } from './shared/transport';
-import type { RelvatoRun, RelvatoSite } from './shared/utils';
+import type { RelvatoRun, RelvatoSiteSummary } from './shared/utils';
 import { compact, latestFinishedRun, sitesMatchingDomain } from './shared/utils';
 
 /**
@@ -30,7 +30,7 @@ export class Relvato implements INodeType {
 		version: 1,
 		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
 		description:
-			'Add sites, start monitoring, run monitors, pause monitor groups and create heartbeats in Relvato website monitoring',
+			"Add sites, read a site's health, start monitoring, run monitors, pause monitor groups and create heartbeats on the Relvato website monitoring platform",
 		defaults: {
 			name: 'Relvato',
 		},
@@ -93,10 +93,11 @@ export class Relvato implements INodeType {
 
 				if (resource === 'site') {
 					if (operation === 'getAll' || operation === 'findByDomain') {
-						const response = await relvatoApiRequest.call(this, 'GET', '/api/v1/sites', {
-							itemIndex: i,
-						});
-						let sites = (Array.isArray(response.sites) ? response.sites : []) as RelvatoSite[];
+						// The summary Relvato's MCP server gives AI assistants — platform, and ready (ownership proven, so
+						// monitors run on their schedule and alert) — rather than REST's raw connectionType, which reads as
+						// "not monitored" when it only means the WordPress plugin isn't connected.
+						const r = await callRelvatoTool.call(this, 'list_sites', {}, i);
+						let sites = (Array.isArray(r.sites) ? r.sites : []) as RelvatoSiteSummary[];
 						if (operation === 'findByDomain') {
 							sites = sitesMatchingDomain(sites, this.getNodeParameter('domain', i) as string);
 						} else if (!(this.getNodeParameter('returnAll', i) as boolean)) {
@@ -125,6 +126,10 @@ export class Relvato implements INodeType {
 							url: site.url,
 							next_step: setup.nextStep ?? null,
 						});
+					} else if (operation === 'getOverview') {
+						const id = siteId();
+						const r = await callRelvatoTool.call(this, 'site_overview', { siteId: id }, i);
+						out({ ...r, id });
 					} else if (operation === 'startMonitoring') {
 						const id = siteId();
 						const goals = this.getNodeParameter('goals', i, []) as string[];

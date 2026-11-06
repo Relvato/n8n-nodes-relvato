@@ -2,7 +2,7 @@
 
 This is an n8n community node package for [Relvato](https://www.relvato.com), a website monitoring platform. Relvato runs monitors against your real site, including uptime, SSL, checkout and sign-in flows, security and vulnerabilities, visual changes and search traffic. It runs them again whenever the site changes.
 
-With this package your n8n workflows can react the moment Relvato sees a change (a site goes down, a monitor starts failing, a new vulnerability appears). Workflows can also act in Relvato: add sites, start monitoring, run monitors, pause monitor groups and create heartbeats.
+With this package your n8n workflows can react the moment Relvato sees a change (a site goes down, a monitor starts failing, a new vulnerability appears). Workflows can also read a site's health and act in Relvato: add sites, start monitoring, run monitors, pause monitor groups and create heartbeats.
 
 It contains two nodes:
 
@@ -22,7 +22,7 @@ In n8n, open **Settings → Community Nodes → Install**, enter `n8n-nodes-relv
 The nodes use one credential, **Relvato API**, which holds an API key.
 
 1. Sign in to Relvato and open [app.relvato.com → API access](https://app.relvato.com/api-access).
-2. Create a **full-access** key. The trigger subscribes to events, and the actions add sites and run monitors, so both need full access. A read-only key works for the lookups only (Get Many sites, Find by Domain, Get Latest run).
+2. Create a **full-access** key. The trigger subscribes to events, and the actions add sites and run monitors, so both need full access. A read-only key works for the lookups only (Get Many sites, Find by Domain, Get Overview, Get Latest run).
 3. In n8n, create a **Relvato API** credential and paste the key. n8n checks it against `GET https://app.relvato.com/api/v1`.
 
 The key is sent as `Authorization: Bearer <key>`. Revoking it in Relvato stops every subscription it created.
@@ -55,8 +55,9 @@ The key is sent as `Authorization: Bearer <key>`. Revoking it in Relvato stops e
 
 | Resource | Operation | What it does |
 |---|---|---|
-| Site | Get Many | Lists the sites on the Relvato account |
-| Site | Find by Domain | Finds a site by its domain, with or without `https://` and `www.` |
+| Site | Get Many | Lists the sites on the Relvato account, one item each: `id`, `name`, `url`, `platform` (`wordpress` or `other`), `ready` and `disabled`. `ready` is true once the site's ownership is proven, so its monitors run on their schedule and send alerts. |
+| Site | Find by Domain | Finds a site by its domain, with or without `https://` and `www.`. Returns the same fields as Get Many. |
+| Site | Get Overview | A site's health in plain language: what needs attention, each monitor's latest result and schedule, setup state, recommended monitors not yet added and the account's run usage |
 | Site | Add | Adds a website (WordPress / WooCommerce, or any other site or AI-built app). If the account already has a site on that domain, it returns that site instead of adding a duplicate. Returns `id`, `name`, `url` and `next_step`, the way to prove ownership. |
 | Site | Start Monitoring for Goals | Turns on the monitors for what matters: checkout and sign-in, security, search traffic, broken pages, speed, the domain, law compliance |
 | Monitor Group | Run Monitors Now | Runs a site's monitors now, all of them or one group (for example after a deploy). Each run counts toward the plan's monthly runs. |
@@ -69,7 +70,7 @@ Monitor groups: Uptime (uptime, heartbeats, ports), User flows (checkout, logins
 
 If Relvato refuses a request, the node fails with Relvato's own explanation, for example *"This API key is read-only…"*, *"Verify the domain first…"* or *"Event subscriptions are on the Pro plan and up."* With **Continue On Fail** (Settings → On Error → Continue) the error becomes an output item and the workflow carries on.
 
-The Relvato node can also be used as a tool by n8n's AI Agent.
+The Relvato node can also be used as a tool by n8n's AI Agent. For questions like "how are my sites doing?", give it **Site → Get Many** (which sites exist and whether each is monitored) and **Site → Get Overview** (one site's verdict).
 
 ## Example workflows
 

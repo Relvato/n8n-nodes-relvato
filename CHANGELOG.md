@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.3
+
+Answers an AI Agent can read correctly.
+
+- **Change: Site → Get Many and Find by Domain** now return the site summary Relvato gives AI assistants (MCP `list_sites`): `id`, `name`, `url`, `platform` (`wordpress` or `other`), `ready` (ownership is proven, so monitors run on their schedule and send alerts) and `disabled`. `connectionType` is gone: it is replaced by `platform`, and `ready` says whether the site is monitored. An agent read `connectionType: "none"` as "not monitored", when it only meant the WordPress plugin wasn't connected. Workflows that use `{{ $json.id }}`, `name` or `url` work as before; one that reads `connectionType` should read `platform` instead.
+- **New: Site → Get Overview** (MCP `site_overview`): a site's health in plain language. It covers what needs attention, each monitor's latest result and schedule, setup state, recommended monitors not yet added and the account's run usage. It returns one item, with `id` set to the site.
+- The operations' actions, which n8n's AI Agent reads as the tool description, now say what each operation returns, and that Run Monitors Now uses the plan's monthly runs.
+
 ## 0.1.2
 
 - Fix: "Listen for test event" now receives Relvato's sample event. The node asks for it while n8n is still setting up the trigger (n8n closes the node's helpers afterwards), and Relvato sends it a few seconds later, once n8n has stored the signing secret. Needs Relvato's `delayMs` on `POST /api/v1/hooks/test`.

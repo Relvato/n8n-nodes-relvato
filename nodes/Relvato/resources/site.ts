@@ -16,26 +16,35 @@ export const siteOperations: INodeProperties[] = [
 				name: 'Add',
 				value: 'add',
 				description:
-					'Add a website to Relvato. If the account already has a site on that domain, it is returned instead of a duplicate.',
-				action: 'Add a site',
+					'Add a website to Relvato and return it with next_step, how to prove ownership; a site already on that domain is returned instead of a duplicate',
+				action: 'Add a site and get how to prove its ownership',
 			},
 			{
 				name: 'Find by Domain',
 				value: 'findByDomain',
-				description: 'Find a site on the Relvato account by its domain',
+				description:
+					'Find a site in this Relvato account by its domain, with the same fields as Get Many',
 				action: 'Find a site by domain',
 			},
 			{
 				name: 'Get Many',
 				value: 'getAll',
-				description: 'List the sites on the Relvato account',
-				action: 'Get many sites',
+				description:
+					'List the websites in this Relvato account. platform is wordpress or other; ready is true once ownership is proven, so monitors run on their schedule and send alerts.',
+				action: 'Get many sites with platform and whether monitors run on their schedule',
+			},
+			{
+				name: 'Get Overview',
+				value: 'getOverview',
+				description:
+					"A site's health in plain language: what needs attention, each monitor's latest result and schedule, setup state and recommended monitors",
+				action: 'Get a site health overview with what needs attention',
 			},
 			{
 				name: 'Start Monitoring for Goals',
 				value: 'startMonitoring',
 				description:
-					'Turn on the monitors for what you care about on a site: checkout and sign-in, security, search traffic and more',
+					'Turn on the monitors for what matters on a site (checkout and sign-in, security, search traffic and more) and return what was added',
 				action: 'Start monitoring a site for goals',
 			},
 		],
@@ -125,8 +134,8 @@ export const siteFields: INodeProperties[] = [
 		],
 	},
 
-	// ── Start Monitoring for Goals ──
-	siteLocator({ displayOptions: show(['startMonitoring']) }),
+	// ── Get Overview, Start Monitoring for Goals ──
+	siteLocator({ displayOptions: show(['getOverview', 'startMonitoring']) }),
 	{
 		displayName: 'Goals',
 		name: 'goals',

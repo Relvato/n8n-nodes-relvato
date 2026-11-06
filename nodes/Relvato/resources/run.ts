@@ -13,8 +13,8 @@ export const runOperations: INodeProperties[] = [
 				name: 'Get Latest',
 				value: 'getLatest',
 				description:
-					"Get a site's most recent finished run, with its result. Returns nothing when the site has no finished run yet.",
-				action: 'Get the latest run',
+					"Get a site's most recent finished run with its result, or nothing when no run has finished yet",
+				action: 'Get the latest finished run of a site',
 			},
 		],
 		default: 'getLatest',

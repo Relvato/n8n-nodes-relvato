@@ -5,27 +5,88 @@ const { executeContext, mcpResult, mcpError } = require('./helpers');
 
 const node = new Relvato();
 const SITE = '3f8a2c1e-9b7d-4e6a-8c5f-1d2e3f4a5b6c';
+// REST GET /api/v1/sites: the site picker's source.
 const sites = {
 	sites: [
 		{ id: SITE, name: 'My Shop', url: 'https://www.myshop.example', connectionType: 'wordpress' },
 		{ id: 'other', name: 'Blog', url: 'https://blog.example', connectionType: 'none' },
 	],
 };
+// MCP list_sites: what Get Many and Find by Domain return.
+const summaries = {
+	sites: [
+		{ id: SITE, name: 'My Shop', url: 'https://www.myshop.example', platform: 'wordpress', ready: true, disabled: false },
+		{ id: 'other', name: 'Blog', url: 'https://blog.example', platform: 'other', ready: false, disabled: false },
+	],
+};
+const listSitesCall = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_sites', arguments: {} } };
 const run = (items, handler, continueOnFail) => {
 	const { ctx, calls } = executeContext({ items, handler, continueOnFail });
 	return node.execute.call(ctx).then((out) => ({ out: out[0], calls }));
 };
 
-test('Site → Find by Domain returns the matching site', async () => {
-	const { out, calls } = await run([{ resource: 'site', operation: 'findByDomain', domain: 'https://myshop.example' }], () => ({ body: sites }));
-	assert.equal(calls[0].url, 'https://app.relvato.com/api/v1/sites');
-	assert.deepEqual(out.map((o) => o.json.id), [SITE]);
+test('Site → Find by Domain returns the matching site, in the list_sites shape', async () => {
+	const { out, calls } = await run([{ resource: 'site', operation: 'findByDomain', domain: 'https://myshop.example' }], () => ({ body: mcpResult(summaries) }));
+	assert.equal(calls.length, 1);
+	assert.equal(calls[0].url, 'https://app.relvato.com/api/mcp');
+	assert.deepEqual(calls[0].body, listSitesCall);
+	assert.deepEqual(out.map((o) => o.json), [summaries.sites[0]]);
 	assert.deepEqual(out[0].pairedItem, { item: 0 });
+	const none = await run([{ resource: 'site', operation: 'findByDomain', domain: 'nothere.example' }], () => ({ body: mcpResult(summaries) }));
+	assert.equal(none.out.length, 0);
+});
+
+test('Site → Get Many returns one item per site from list_sites (id, name, url, platform, ready, disabled)', async () => {
+	const { out, calls } = await run([{ resource: 'site', operation: 'getAll', returnAll: true }], () => ({ body: mcpResult(summaries) }));
+	assert.equal(calls[0].url, 'https://app.relvato.com/api/mcp');
+	assert.deepEqual(calls[0].body, listSitesCall);
+	assert.deepEqual(out.map((o) => o.json), summaries.sites);
+	assert.deepEqual(out.map((o) => o.pairedItem), [{ item: 0 }, { item: 0 }]);
+	assert.equal(out[1].json.platform, 'other');
+	assert.equal(out[1].json.ready, false);
+	assert.equal('connectionType' in out[1].json, false);
 });
 
 test('Site → Get Many honours the limit', async () => {
-	const { out } = await run([{ resource: 'site', operation: 'getAll', returnAll: false, limit: 1 }], () => ({ body: sites }));
+	const { out } = await run([{ resource: 'site', operation: 'getAll', returnAll: false, limit: 1 }], () => ({ body: mcpResult(summaries) }));
+	assert.deepEqual(out.map((o) => o.json.id), [SITE]);
+});
+
+test('Site → Get Many with no sites returns no item', async () => {
+	const { out } = await run([{ resource: 'site', operation: 'getAll', returnAll: true }], () => ({ body: mcpResult({ sites: [] }) }));
+	assert.equal(out.length, 0);
+});
+
+test('Site → Get Overview calls site_overview and returns its result as one item', async () => {
+	const answer = {
+		site: summaries.sites[0],
+		dashboard: `https://app.relvato.com/sites/${SITE}`,
+		setup: { ready: true, nextStep: null },
+		verdict: { tone: 'warn', headline: 'Checkout needs attention', summary: 'The checkout monitor failed at payment.', passing: 7, withVerdict: 8 },
+		findings: [{ key: 'checkout', runId: 'r9' }],
+		checks: [{ checkId: 'c1', key: 'uptime', name: 'Uptime', enabled: true, schedule: { schedule: 'hourly' }, latestRun: { runId: 'r1', status: 'passed' } }],
+		pausedGroups: [],
+		recommendedNotAdded: ['visual'],
+		account: { plan: 'pro', runs: { used: 120, quota: 3000 } },
+	};
+	const { out, calls } = await run([{ resource: 'site', operation: 'getOverview', siteId: SITE }], () => ({ body: mcpResult(answer) }));
+	assert.equal(calls[0].url, 'https://app.relvato.com/api/mcp');
+	assert.deepEqual(calls[0].body.params, { name: 'site_overview', arguments: { siteId: SITE } });
 	assert.equal(out.length, 1);
+	assert.deepEqual(out[0].json, { ...answer, id: SITE });
+	assert.deepEqual(out[0].pairedItem, { item: 0 });
+});
+
+test('Site → Get Overview without a site fails before calling Relvato', async () => {
+	let called = false;
+	await assert.rejects(
+		run([{ resource: 'site', operation: 'getOverview', siteId: '' }], () => {
+			called = true;
+			return { body: mcpResult({}) };
+		}),
+		(e) => e.message === 'Choose a site.',
+	);
+	assert.equal(called, false);
 });
 
 test('Site → Add calls the add_site MCP tool and returns id, name, url, next_step', async () => {
@@ -132,4 +193,18 @@ test('the site picker lists the account sites', async () => {
 	const { ctx } = executeContext({ items: [{}], handler: () => ({ body: sites }) });
 	const r = await node.methods.listSearch.searchSites.call(ctx, 'blog');
 	assert.deepEqual(r.results, [{ name: 'Blog (https://blog.example)', value: 'other', url: 'https://app.relvato.com/sites/other' }]);
+});
+
+test("the AI Agent's tool descriptions (n8n builds them from each operation's action)", () => {
+	const { NodeHelpers } = require('n8n-workflow');
+	const tool = (resource, operation) =>
+		NodeHelpers.getToolDescriptionForNode({ parameters: { resource, operation, descriptionType: 'auto' } }, node);
+	assert.equal(tool('site', 'getAll'), 'Get many sites with platform and whether monitors run on their schedule in Relvato');
+	assert.equal(tool('site', 'getOverview'), 'Get a site health overview with what needs attention in Relvato');
+	assert.equal(tool('monitorGroup', 'run'), 'Run monitors now using the monthly runs of the plan in Relvato');
+	for (const p of node.description.properties.filter((p) => p.name === 'operation')) {
+		for (const o of p.options) {
+			assert.ok(!/\b(check|checks|journey|journeys)\b/i.test(`${o.action} ${o.description}`), `${o.value}: monitor, not check/journey`);
+		}
+	}
 });
