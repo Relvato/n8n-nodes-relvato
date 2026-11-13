@@ -11,7 +11,7 @@ import type {
 } from 'n8n-workflow';
 import { NodeApiError } from 'n8n-workflow';
 import { RELVATO_BASE_URL } from './constants';
-import { parseToolResult, relvatoErrorMessage } from './utils';
+import { relvatoErrorMessage } from './utils';
 
 type RelvatoContext =
 	| IExecuteFunctions
@@ -77,28 +77,3 @@ export async function relvatoApiRequest(
 	return {};
 }
 
-/**
- * Call one of Relvato's MCP tools (JSON-RPC tools/call on /api/mcp, same API key) and return its JSON result.
- * The actions that only the MCP server offers — add a site, pause a group… — go through here.
- * A tool's refusal (`result.isError`) becomes a NodeApiError with Relvato's words.
- */
-export async function callRelvatoTool(
-	this: RelvatoContext,
-	name: string,
-	args: IDataObject,
-	itemIndex?: number,
-): Promise<IDataObject> {
-	const rpc = await relvatoApiRequest.call(this, 'POST', '/api/mcp', {
-		body: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } },
-		headers: { Accept: 'application/json, text/event-stream', 'Content-Type': 'application/json' },
-		itemIndex,
-	});
-	const result = parseToolResult(rpc);
-	if ('error' in result) {
-		throw new NodeApiError(this.getNode(), { message: result.error } as JsonObject, {
-			message: result.error,
-			itemIndex,
-		});
-	}
-	return result.data;
-}

@@ -12,14 +12,14 @@ import { monitorGroupFields, monitorGroupOperations } from './resources/monitorG
 import { runFields, runOperations } from './resources/run';
 import { siteFields, siteOperations } from './resources/site';
 import { searchSites } from './shared/methods';
-import { callRelvatoTool, relvatoApiRequest } from './shared/transport';
+import { relvatoApiRequest } from './shared/transport';
 import type { RelvatoRun, RelvatoSiteSummary } from './shared/utils';
-import { compact, latestFinishedRun, sitesMatchingDomain } from './shared/utils';
+import { compact, latestFinishedRun, siteSummary, sitesMatchingDomain } from './shared/utils';
 
 /**
- * Relvato actions. Programmatic rather than declarative: half the operations are MCP tool calls (one JSON-RPC
- * endpoint whose answer is JSON inside `result.content[0].text`, with refusals flagged by `result.isError`), and the
- * searches filter client-side (domain matching, the newest finished run) — neither maps onto declarative routing.
+ * Relvato actions, each one a call to Relvato's REST API (/api/v1). Programmatic rather than declarative: the
+ * searches filter client-side (domain matching, the newest finished run) and some answers are reshaped (a scan's run
+ * ids, a heartbeat's ping URL), which declarative routing can't express.
  */
 export class Relvato implements INodeType {
 	description: INodeTypeDescription = {
@@ -91,13 +91,16 @@ export class Relvato implements INodeType {
 					return id;
 				};
 
+				const sitePath = (id: string) => `/api/v1/sites/${encodeURIComponent(id)}`;
+
 				if (resource === 'site') {
 					if (operation === 'getAll' || operation === 'findByDomain') {
-						// The summary Relvato's MCP server gives AI assistants — platform, and ready (ownership proven, so
-						// monitors run on their schedule and alert) — rather than REST's raw connectionType, which reads as
-						// "not monitored" when it only means the WordPress plugin isn't connected.
-						const r = await callRelvatoTool.call(this, 'list_sites', {}, i);
-						let sites = (Array.isArray(r.sites) ? r.sites : []) as RelvatoSiteSummary[];
+						// platform, and ready (ownership proven, so monitors run on their schedule and alert), without the raw
+						// connectionType, which reads as "not monitored" when it only means the WordPress plugin isn't connected.
+						const r = await relvatoApiRequest.call(this, 'GET', '/api/v1/sites', { itemIndex: i });
+						let sites = ((Array.isArray(r.sites) ? r.sites : []) as RelvatoSiteSummary[]).map(
+							siteSummary,
+						);
 						if (operation === 'findByDomain') {
 							sites = sitesMatchingDomain(sites, this.getNodeParameter('domain', i) as string);
 						} else if (!(this.getNodeParameter('returnAll', i) as boolean)) {
@@ -106,16 +109,14 @@ export class Relvato implements INodeType {
 						sites.forEach((s) => out(s));
 					} else if (operation === 'add') {
 						const additional = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
-						const r = await callRelvatoTool.call(
-							this,
-							'add_site',
-							compact({
+						const r = await relvatoApiRequest.call(this, 'POST', '/api/v1/sites', {
+							body: compact({
 								url: this.getNodeParameter('url', i) as string,
 								platform: this.getNodeParameter('platform', i) as string,
 								name: additional.name as string | undefined,
 							}),
-							i,
-						);
+							itemIndex: i,
+						});
 						// Relvato answers { created, site, setup }; setup.nextStep says how to prove ownership (null once proven).
 						const site = (r.site ?? r) as IDataObject;
 						const setup = (r.setup ?? {}) as IDataObject;
@@ -128,7 +129,9 @@ export class Relvato implements INodeType {
 						});
 					} else if (operation === 'getOverview') {
 						const id = siteId();
-						const r = await callRelvatoTool.call(this, 'site_overview', { siteId: id }, i);
+						const r = await relvatoApiRequest.call(this, 'GET', `${sitePath(id)}/overview`, {
+							itemIndex: i,
+						});
 						out({ ...r, id });
 					} else if (operation === 'startMonitoring') {
 						const id = siteId();
@@ -138,12 +141,10 @@ export class Relvato implements INodeType {
 								itemIndex: i,
 							});
 						}
-						const r = await callRelvatoTool.call(
-							this,
-							'start_monitoring_for_goals',
-							{ siteId: id, goals },
-							i,
-						);
+						const r = await relvatoApiRequest.call(this, 'POST', `${sitePath(id)}/goals`, {
+							body: { goals },
+							itemIndex: i,
+						});
 						out({ ...r, id });
 					} else {
 						throw new NodeOperationError(this.getNode(), `Unknown operation: ${operation}`, {
@@ -153,11 +154,12 @@ export class Relvato implements INodeType {
 				} else if (resource === 'monitorGroup') {
 					const id = siteId();
 					const group = this.getNodeParameter('group', i) as string;
+					const groupPath = `${sitePath(id)}/groups/${encodeURIComponent(group)}`;
 					if (operation === 'run') {
 						const response = await relvatoApiRequest.call(
 							this,
 							'POST',
-							`/api/v1/sites/${encodeURIComponent(id)}/scan`,
+							`${sitePath(id)}/scan`,
 							{ body: group && group !== 'all' ? { group } : {}, itemIndex: i },
 						);
 						const runs = (Array.isArray(response.runs) ? response.runs : []) as IDataObject[];
@@ -169,20 +171,16 @@ export class Relvato implements INodeType {
 						});
 					} else if (operation === 'pause') {
 						const duration = this.getNodeParameter('duration', i) as string;
-						const r = await callRelvatoTool.call(
-							this,
-							'pause_monitor_group',
-							{ siteId: id, group, duration },
-							i,
-						);
+						const r = await relvatoApiRequest.call(this, 'POST', `${groupPath}/pause`, {
+							body: { duration },
+							itemIndex: i,
+						});
 						out({ ...r, id });
 					} else if (operation === 'resume') {
-						const r = await callRelvatoTool.call(
-							this,
-							'resume_monitor_group',
-							{ siteId: id, group },
-							i,
-						);
+						const r = await relvatoApiRequest.call(this, 'POST', `${groupPath}/resume`, {
+							body: {},
+							itemIndex: i,
+						});
 						out({ ...r, id });
 					} else {
 						throw new NodeOperationError(this.getNode(), `Unknown operation: ${operation}`, {
@@ -200,17 +198,16 @@ export class Relvato implements INodeType {
 					if (latest) out(latest);
 				} else if (resource === 'heartbeat' && operation === 'add') {
 					const name = this.getNodeParameter('name', i) as string;
-					const r = await callRelvatoTool.call(
-						this,
-						'add_heartbeat',
-						compact({
-							siteId: siteId(),
+					// Left out, Relvato uses once a day (86400) with an hour's grace (3600).
+					const additional = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
+					const r = await relvatoApiRequest.call(this, 'POST', `${sitePath(siteId())}/heartbeats`, {
+						body: compact({
 							name,
-							periodSec: this.getNodeParameter('periodSec', i, 86400) as number,
-							graceSec: this.getNodeParameter('graceSec', i, 3600) as number,
+							periodSec: additional.periodSec as number | undefined,
+							graceSec: additional.graceSec as number | undefined,
 						}),
-						i,
-					);
+						itemIndex: i,
+					});
 					// Relvato answers { heartbeatId, pingUrl, failUrl, cronExample, … }.
 					out({
 						...r,

@@ -77,16 +77,4 @@ function executeContext({ items, handler, continueOnFail = false }) {
 	return { ctx, calls: http.calls };
 }
 
-/** An MCP tools/call answer as Relvato's /api/mcp sends it. */
-const mcpResult = (data) => ({
-	jsonrpc: '2.0',
-	id: 1,
-	result: { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] },
-});
-const mcpError = (text) => ({
-	jsonrpc: '2.0',
-	id: 1,
-	result: { content: [{ type: 'text', text }], isError: true },
-});
-
-module.exports = { hookContext, webhookContext, executeContext, mcpResult, mcpError };
+module.exports = { hookContext, webhookContext, executeContext };

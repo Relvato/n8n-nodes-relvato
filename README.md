@@ -25,9 +25,11 @@ The nodes use one credential, **Relvato API**, which holds an API key.
 2. Create a **full-access** key. The trigger subscribes to events, and the actions add sites and run monitors, so both need full access. A read-only key works for the lookups only (Get Many sites, Find by Domain, Get Overview, Get Latest run).
 3. In n8n, create a **Relvato API** credential and paste the key. n8n checks it against `GET https://app.relvato.com/api/v1`.
 
-The key is sent as `Authorization: Bearer <key>`. Revoking it in Relvato stops every subscription it created.
+The key is sent as `Authorization: Bearer <key>`. Every operation calls Relvato's REST API (`https://app.relvato.com/api/v1`). Revoking the key in Relvato stops every subscription it created.
 
 ## Relvato Trigger events
+
+The trigger needs the Pro plan or higher and a full-access API key (see [Plan requirements](#plan-requirements)).
 
 | Event | Fires when | Filters |
 |---|---|---|
@@ -64,7 +66,7 @@ The key is sent as `Authorization: Bearer <key>`. Revoking it in Relvato stops e
 | Monitor Group | Pause | Pauses one group of monitors on a site for 1 hour, 24 hours or until resumed (maintenance, a redesign) |
 | Monitor Group | Resume | Resumes a paused group |
 | Run | Get Latest | Returns a site's most recent finished run with its result. Returns no item if there isn't one yet. |
-| Heartbeat | Add | Creates a heartbeat for a job you run (a cron job, a backup) and returns its `ping_url` and `fail_url`. If no ping arrives in time, Relvato alerts you. |
+| Heartbeat | Add | Creates a heartbeat for a job you run (a cron job, a backup) and returns its `ping_url` and `fail_url`. If no ping arrives in time, Relvato alerts you. Under **Additional Fields**, set how often the job runs and the grace time; left out, Relvato expects a ping once a day, with an hour's grace. |
 
 Monitor groups: Uptime (uptime, heartbeats, ports), User flows (checkout, logins, forms), Security, Design, Performance, SEO / AEO, Domain lifecycle, Legal compliance.
 

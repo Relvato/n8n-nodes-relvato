@@ -9,12 +9,28 @@ export interface RelvatoSite extends IDataObject {
 	url: string;
 }
 
-/** A site as the MCP tool list_sites summarises it (Get Many, Find by Domain). */
+/** A site as Get Many and Find by Domain return it. */
 export interface RelvatoSiteSummary extends RelvatoSite {
 	platform: 'wordpress' | 'other';
 	/** Ownership is proven: monitors run on their schedule and send alerts. */
 	ready: boolean;
 	disabled: boolean;
+}
+
+/**
+ * The fields Get Many and Find by Domain return for a site. GET /api/v1/sites also sends the raw connectionType, left
+ * out on purpose: an AI Agent read connectionType "none" as "not monitored", when it only means the WordPress plugin
+ * isn't connected. `ready` is what says whether monitors run.
+ */
+export function siteSummary(s: RelvatoSiteSummary): RelvatoSiteSummary {
+	return {
+		id: s.id,
+		name: s.name ?? null,
+		url: s.url,
+		platform: s.platform,
+		ready: s.ready === true,
+		disabled: s.disabled === true,
+	};
 }
 
 export interface RelvatoRun extends IDataObject {
@@ -83,26 +99,3 @@ export function relvatoErrorMessage(status: number, body: unknown): string {
 	return `Relvato answered HTTP ${status}${code ? ` (${code})` : ''}.`;
 }
 
-/** What an MCP tools/call answer means: the tool's JSON result, or Relvato's refusal in its own words. */
-export function parseToolResult(rpc: unknown): { data: IDataObject } | { error: string } {
-	const r = rpc && typeof rpc === 'object' ? (rpc as IDataObject) : {};
-	if (r.error && typeof r.error === 'object') {
-		const message = (r.error as IDataObject).message;
-		return {
-			error: typeof message === 'string' && message ? message : 'Relvato refused the request.',
-		};
-	}
-	const result = r.result && typeof r.result === 'object' ? (r.result as IDataObject) : {};
-	const content = Array.isArray(result.content) ? (result.content as IDataObject[]) : [];
-	const text =
-		content.length && typeof content[0].text === 'string' ? (content[0].text as string) : '';
-	if (result.isError === true) return { error: text || 'Relvato refused the request.' };
-	try {
-		const parsed = JSON.parse(text) as unknown;
-		if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
-			return { data: parsed as IDataObject };
-		return { data: { result: parsed as IDataObject } };
-	} catch {
-		return { data: { message: text } };
-	}
-}

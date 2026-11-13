@@ -5,7 +5,7 @@ const {
 	sitesMatchingDomain,
 	latestFinishedRun,
 	relvatoErrorMessage,
-	parseToolResult,
+	siteSummary,
 } = require('../dist/nodes/Relvato/shared/utils');
 
 const sites = [
@@ -56,11 +56,7 @@ test("errors carry Relvato's own message", () => {
 	assert.equal(relvatoErrorMessage(418, { error: 'teapot' }), 'Relvato answered HTTP 418 (teapot).');
 });
 
-test('MCP answers: JSON result, tool refusal, JSON-RPC error', () => {
-	const ok = { jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text: '{"heartbeatId":"h1"}' }] } };
-	assert.deepEqual(parseToolResult(ok), { data: { heartbeatId: 'h1' } });
-	const refused = { jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text: 'Heartbeat limit reached.' }], isError: true } };
-	assert.deepEqual(parseToolResult(refused), { error: 'Heartbeat limit reached.' });
-	assert.deepEqual(parseToolResult({ jsonrpc: '2.0', id: 1, error: { code: -32602, message: 'Unknown tool: x' } }), { error: 'Unknown tool: x' });
-	assert.deepEqual(parseToolResult({ result: { content: [{ type: 'text', text: 'plain words' }] } }), { data: { message: 'plain words' } });
+test('siteSummary keeps id, name, url, platform, ready, disabled and drops connectionType', () => {
+	const rest = { id: 'a', name: 'Blog', url: 'https://blog.example', connectionType: 'none', platform: 'other', ready: false, disabled: false };
+	assert.deepEqual(siteSummary(rest), { id: 'a', name: 'Blog', url: 'https://blog.example', platform: 'other', ready: false, disabled: false });
 });

@@ -1,45 +1,41 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { Relvato } = require('../dist/nodes/Relvato/Relvato.node');
-const { executeContext, mcpResult, mcpError } = require('./helpers');
+const { executeContext } = require('./helpers');
 
 const node = new Relvato();
 const SITE = '3f8a2c1e-9b7d-4e6a-8c5f-1d2e3f4a5b6c';
-// REST GET /api/v1/sites: the site picker's source.
+const API = 'https://app.relvato.com/api/v1';
+// REST GET /api/v1/sites, as Relvato answers it: the site picker's source, and Get Many / Find by Domain's.
 const sites = {
 	sites: [
-		{ id: SITE, name: 'My Shop', url: 'https://www.myshop.example', connectionType: 'wordpress' },
-		{ id: 'other', name: 'Blog', url: 'https://blog.example', connectionType: 'none' },
+		{ id: SITE, name: 'My Shop', url: 'https://www.myshop.example', connectionType: 'wordpress', platform: 'wordpress', ready: true, disabled: false },
+		{ id: 'other', name: 'Blog', url: 'https://blog.example', connectionType: 'none', platform: 'other', ready: false, disabled: false },
 	],
 };
-// MCP list_sites: what Get Many and Find by Domain return.
+// What Get Many and Find by Domain return: the same sites without connectionType.
 const summaries = {
-	sites: [
-		{ id: SITE, name: 'My Shop', url: 'https://www.myshop.example', platform: 'wordpress', ready: true, disabled: false },
-		{ id: 'other', name: 'Blog', url: 'https://blog.example', platform: 'other', ready: false, disabled: false },
-	],
+	sites: sites.sites.map(({ connectionType, ...s }) => s),
 };
-const listSitesCall = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_sites', arguments: {} } };
+const call = (c) => ({ method: c.method, url: c.url, body: c.body });
 const run = (items, handler, continueOnFail) => {
 	const { ctx, calls } = executeContext({ items, handler, continueOnFail });
 	return node.execute.call(ctx).then((out) => ({ out: out[0], calls }));
 };
 
-test('Site → Find by Domain returns the matching site, in the list_sites shape', async () => {
-	const { out, calls } = await run([{ resource: 'site', operation: 'findByDomain', domain: 'https://myshop.example' }], () => ({ body: mcpResult(summaries) }));
+test('Site → Find by Domain returns the matching site, without connectionType', async () => {
+	const { out, calls } = await run([{ resource: 'site', operation: 'findByDomain', domain: 'https://myshop.example' }], () => ({ body: sites }));
 	assert.equal(calls.length, 1);
-	assert.equal(calls[0].url, 'https://app.relvato.com/api/mcp');
-	assert.deepEqual(calls[0].body, listSitesCall);
+	assert.deepEqual(call(calls[0]), { method: 'GET', url: `${API}/sites`, body: undefined });
 	assert.deepEqual(out.map((o) => o.json), [summaries.sites[0]]);
 	assert.deepEqual(out[0].pairedItem, { item: 0 });
-	const none = await run([{ resource: 'site', operation: 'findByDomain', domain: 'nothere.example' }], () => ({ body: mcpResult(summaries) }));
+	const none = await run([{ resource: 'site', operation: 'findByDomain', domain: 'nothere.example' }], () => ({ body: sites }));
 	assert.equal(none.out.length, 0);
 });
 
-test('Site → Get Many returns one item per site from list_sites (id, name, url, platform, ready, disabled)', async () => {
-	const { out, calls } = await run([{ resource: 'site', operation: 'getAll', returnAll: true }], () => ({ body: mcpResult(summaries) }));
-	assert.equal(calls[0].url, 'https://app.relvato.com/api/mcp');
-	assert.deepEqual(calls[0].body, listSitesCall);
+test('Site → Get Many returns one item per site (id, name, url, platform, ready, disabled)', async () => {
+	const { out, calls } = await run([{ resource: 'site', operation: 'getAll', returnAll: true }], () => ({ body: sites }));
+	assert.deepEqual(call(calls[0]), { method: 'GET', url: `${API}/sites`, body: undefined });
 	assert.deepEqual(out.map((o) => o.json), summaries.sites);
 	assert.deepEqual(out.map((o) => o.pairedItem), [{ item: 0 }, { item: 0 }]);
 	assert.equal(out[1].json.platform, 'other');
@@ -48,16 +44,16 @@ test('Site → Get Many returns one item per site from list_sites (id, name, url
 });
 
 test('Site → Get Many honours the limit', async () => {
-	const { out } = await run([{ resource: 'site', operation: 'getAll', returnAll: false, limit: 1 }], () => ({ body: mcpResult(summaries) }));
+	const { out } = await run([{ resource: 'site', operation: 'getAll', returnAll: false, limit: 1 }], () => ({ body: sites }));
 	assert.deepEqual(out.map((o) => o.json.id), [SITE]);
 });
 
 test('Site → Get Many with no sites returns no item', async () => {
-	const { out } = await run([{ resource: 'site', operation: 'getAll', returnAll: true }], () => ({ body: mcpResult({ sites: [] }) }));
+	const { out } = await run([{ resource: 'site', operation: 'getAll', returnAll: true }], () => ({ body: { sites: [] } }));
 	assert.equal(out.length, 0);
 });
 
-test('Site → Get Overview calls site_overview and returns its result as one item', async () => {
+test("Site → Get Overview reads the site's overview and returns it as one item", async () => {
 	const answer = {
 		site: summaries.sites[0],
 		dashboard: `https://app.relvato.com/sites/${SITE}`,
@@ -69,9 +65,8 @@ test('Site → Get Overview calls site_overview and returns its result as one it
 		recommendedNotAdded: ['visual'],
 		account: { plan: 'pro', runs: { used: 120, quota: 3000 } },
 	};
-	const { out, calls } = await run([{ resource: 'site', operation: 'getOverview', siteId: SITE }], () => ({ body: mcpResult(answer) }));
-	assert.equal(calls[0].url, 'https://app.relvato.com/api/mcp');
-	assert.deepEqual(calls[0].body.params, { name: 'site_overview', arguments: { siteId: SITE } });
+	const { out, calls } = await run([{ resource: 'site', operation: 'getOverview', siteId: SITE }], () => ({ body: answer }));
+	assert.deepEqual(call(calls[0]), { method: 'GET', url: `${API}/sites/${SITE}/overview`, body: undefined });
 	assert.equal(out.length, 1);
 	assert.deepEqual(out[0].json, { ...answer, id: SITE });
 	assert.deepEqual(out[0].pairedItem, { item: 0 });
@@ -82,37 +77,31 @@ test('Site → Get Overview without a site fails before calling Relvato', async 
 	await assert.rejects(
 		run([{ resource: 'site', operation: 'getOverview', siteId: '' }], () => {
 			called = true;
-			return { body: mcpResult({}) };
+			return { body: {} };
 		}),
 		(e) => e.message === 'Choose a site.',
 	);
 	assert.equal(called, false);
 });
 
-test('Site → Add calls the add_site MCP tool and returns id, name, url, next_step', async () => {
+test('Site → Add posts the site and returns id, name, url, next_step', async () => {
 	const answer = { created: true, site: { id: SITE, name: 'myshop.example', url: 'https://myshop.example' }, setup: { nextStep: 'Verify the domain.' } };
 	const { out, calls } = await run(
 		[{ resource: 'site', operation: 'add', url: 'https://myshop.example', platform: 'other', additionalFields: {} }],
-		() => ({ body: mcpResult(answer) }),
+		() => ({ statusCode: 201, body: answer }),
 	);
-	assert.equal(calls[0].url, 'https://app.relvato.com/api/mcp');
-	assert.deepEqual(calls[0].body, {
-		jsonrpc: '2.0',
-		id: 1,
-		method: 'tools/call',
-		params: { name: 'add_site', arguments: { url: 'https://myshop.example', platform: 'other' } },
-	});
+	assert.deepEqual(call(calls[0]), { method: 'POST', url: `${API}/sites`, body: { url: 'https://myshop.example', platform: 'other' } });
 	assert.equal(out[0].json.id, SITE);
 	assert.equal(out[0].json.next_step, 'Verify the domain.');
 	assert.equal(out[0].json.created, true);
 });
 
-test('Site → Start Monitoring for Goals sends siteId and goals', async () => {
+test("Site → Start Monitoring for Goals posts the goals to the site's goals", async () => {
 	const { out, calls } = await run(
 		[{ resource: 'site', operation: 'startMonitoring', siteId: SITE, goals: ['security', 'flows'] }],
-		() => ({ body: mcpResult({ siteId: SITE, monitorsAdded: ['uptime'] }) }),
+		() => ({ body: { siteId: SITE, monitorsAdded: ['uptime'] } }),
 	);
-	assert.deepEqual(calls[0].body.params, { name: 'start_monitoring_for_goals', arguments: { siteId: SITE, goals: ['security', 'flows'] } });
+	assert.deepEqual(call(calls[0]), { method: 'POST', url: `${API}/sites/${SITE}/goals`, body: { goals: ['security', 'flows'] } });
 	assert.equal(out[0].json.id, SITE);
 });
 
@@ -127,11 +116,12 @@ test('Monitor Group → Run Monitors Now posts the group (or nothing for all)', 
 	assert.deepEqual(all.calls[0].body, {});
 });
 
-test('Monitor Group → Pause / Resume call their MCP tools', async () => {
-	const pause = await run([{ resource: 'monitorGroup', operation: 'pause', siteId: SITE, group: 'design', duration: '24h' }], () => ({ body: mcpResult({ monitorsOff: 3 }) }));
-	assert.deepEqual(pause.calls[0].body.params, { name: 'pause_monitor_group', arguments: { siteId: SITE, group: 'design', duration: '24h' } });
-	const resume = await run([{ resource: 'monitorGroup', operation: 'resume', siteId: SITE, group: 'design' }], () => ({ body: mcpResult({ wasPaused: true }) }));
-	assert.deepEqual(resume.calls[0].body.params, { name: 'resume_monitor_group', arguments: { siteId: SITE, group: 'design' } });
+test("Monitor Group → Pause / Resume post to the group's pause and resume", async () => {
+	const pause = await run([{ resource: 'monitorGroup', operation: 'pause', siteId: SITE, group: 'design', duration: '24h' }], () => ({ body: { monitorsOff: 3 } }));
+	assert.deepEqual(call(pause.calls[0]), { method: 'POST', url: `${API}/sites/${SITE}/groups/design/pause`, body: { duration: '24h' } });
+	assert.equal(pause.out[0].json.monitorsOff, 3);
+	const resume = await run([{ resource: 'monitorGroup', operation: 'resume', siteId: SITE, group: 'design' }], () => ({ body: { wasPaused: true } }));
+	assert.deepEqual(call(resume.calls[0]), { method: 'POST', url: `${API}/sites/${SITE}/groups/design/resume`, body: {} });
 	assert.equal(resume.out[0].json.wasPaused, true);
 });
 
@@ -144,23 +134,55 @@ test('Run → Get Latest returns the newest finished run, or no item', async () 
 	assert.equal(none.out.length, 0);
 });
 
-test('Heartbeat → Add returns id, ping_url, fail_url', async () => {
+test('Heartbeat → Add posts the heartbeat and returns id, ping_url, fail_url', async () => {
 	const answer = { heartbeatId: 'hb1', pingUrl: 'https://app.relvato.com/api/hb/t', failUrl: 'https://app.relvato.com/api/hb/t/fail' };
 	const { out, calls } = await run(
-		[{ resource: 'heartbeat', operation: 'add', siteId: SITE, name: 'Nightly backup', periodSec: 86400, graceSec: 3600 }],
-		() => ({ body: mcpResult(answer) }),
+		[{ resource: 'heartbeat', operation: 'add', siteId: SITE, name: 'Nightly backup', additionalFields: { periodSec: 3600, graceSec: 600 } }],
+		() => ({ body: answer }),
 	);
-	assert.deepEqual(calls[0].body.params.arguments, { siteId: SITE, name: 'Nightly backup', periodSec: 86400, graceSec: 3600 });
+	assert.deepEqual(call(calls[0]), { method: 'POST', url: `${API}/sites/${SITE}/heartbeats`, body: { name: 'Nightly backup', periodSec: 3600, graceSec: 600 } });
 	assert.equal(out[0].json.id, 'hb1');
 	assert.equal(out[0].json.ping_url, answer.pingUrl);
 	assert.equal(out[0].json.fail_url, answer.failUrl);
 });
 
-test("an MCP refusal becomes an error with Relvato's words", async () => {
+test('Heartbeat → Add without Additional Fields leaves the schedule to Relvato', async () => {
+	const { calls } = await run([{ resource: 'heartbeat', operation: 'add', siteId: SITE, name: 'Nightly backup' }], () => ({ body: { heartbeatId: 'hb1' } }));
+	assert.deepEqual(calls[0].body, { name: 'Nightly backup' });
+});
+
+test("a refused write becomes a NodeApiError with Relvato's words", async () => {
 	await assert.rejects(
-		run([{ resource: 'heartbeat', operation: 'add', siteId: SITE, name: 'x' }], () => ({ body: mcpError('This plan allows 2 heartbeats.') })),
-		(e) => e.constructor.name === 'NodeApiError' && e.message === 'This plan allows 2 heartbeats.',
+		run([{ resource: 'heartbeat', operation: 'add', siteId: SITE, name: 'x' }], () => ({
+			statusCode: 400,
+			body: { error: 'bad_request', message: 'This plan allows 2 heartbeats.' },
+		})),
+		(e) => e.constructor.name === 'NodeApiError' && e.message === 'This plan allows 2 heartbeats.' && e.httpCode === '400',
 	);
+});
+
+test('ids in the path are URL-encoded', async () => {
+	const { calls } = await run([{ resource: 'monitorGroup', operation: 'pause', siteId: 'a/b', group: 'x y', duration: '1h' }], () => ({ body: {} }));
+	assert.equal(calls[0].url, `${API}/sites/a%2Fb/groups/x%20y/pause`);
+});
+
+test('no operation calls the MCP server', async () => {
+	const ops = [
+		{ resource: 'site', operation: 'getAll', returnAll: true },
+		{ resource: 'site', operation: 'findByDomain', domain: 'blog.example' },
+		{ resource: 'site', operation: 'getOverview', siteId: SITE },
+		{ resource: 'site', operation: 'add', url: 'https://x.example', platform: 'other', additionalFields: {} },
+		{ resource: 'site', operation: 'startMonitoring', siteId: SITE, goals: ['security'] },
+		{ resource: 'monitorGroup', operation: 'run', siteId: SITE, group: 'all' },
+		{ resource: 'monitorGroup', operation: 'pause', siteId: SITE, group: 'design', duration: '1h' },
+		{ resource: 'monitorGroup', operation: 'resume', siteId: SITE, group: 'design' },
+		{ resource: 'run', operation: 'getLatest', siteId: SITE },
+		{ resource: 'heartbeat', operation: 'add', siteId: SITE, name: 'x' },
+	];
+	for (const op of ops) {
+		const { calls } = await run([op], () => ({ body: { sites: [], runs: [] } }));
+		for (const c of calls) assert.ok(c.url.startsWith(`${API}/`), `${op.resource} ${op.operation}: ${c.url}`);
+	}
 });
 
 test("an HTTP refusal becomes a NodeApiError with Relvato's message and code", async () => {

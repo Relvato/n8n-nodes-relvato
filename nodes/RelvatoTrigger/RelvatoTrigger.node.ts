@@ -131,13 +131,6 @@ export class RelvatoTrigger implements INodeType {
 		],
 		properties: [
 			{
-				displayName:
-					'Needs a full-access API key on the Pro plan or higher. Relvato sends an event when a monitor changes state (passing to failing, or failing to passing), not on every repeated failure.',
-				name: 'notice',
-				type: 'notice',
-				default: '',
-			},
-			{
 				displayName: 'Event',
 				name: 'event',
 				type: 'options',
@@ -145,6 +138,8 @@ export class RelvatoTrigger implements INodeType {
 				noDataExpression: true,
 				options: EVENT_OPTIONS,
 				default: 'monitorFailed',
+				description:
+					'Relvato sends an event when a monitor changes state (passing to failing, or failing to passing), not on every repeated failure. Event subscriptions need the Pro plan or higher and a full-access API key.',
 			},
 			siteLocator({
 				required: false,
